@@ -1,0 +1,65 @@
+--- a/subprojects/frida-gum/gum/backend-arm64/guminterceptor-arm64.c
++++ b/subprojects/frida-gum/gum/backend-arm64/guminterceptor-arm64.c
+@@ -1060,6 +1060,47 @@
+   ctx->trampoline_deflector = NULL;
+ }
+
++static gboolean
++gum_arm64_writer_put_compact_redirect (GumArm64Writer * aw,
++                                       arm64_reg scratch_reg,
++                                       GumAddress target)
++{
++  guint reg_index;
++  guint64 high_bits = target >> 48;
++  guint32 first;
++
++  if (scratch_reg == ARM64_REG_X16)
++    reg_index = 16;
++  else if (scratch_reg == ARM64_REG_X17)
++    reg_index = 17;
++  else
++  {
++    g_printerr ("ARM64_YONLENDIRME_UYARI: desteklenmeyen geçici register; özgün "
++        "LDR yönlendirmesi kullanılıyor, bu hedef gizlenmedi\n");
++    return FALSE;
++  }
++
++  if (high_bits == 0)
++    first = 0xd2800000u | ((target & 0xffff) << 5) | reg_index;
++  else if (high_bits == 0xffff)
++    first = 0x92800000u | (((~target) & 0xffff) << 5) | reg_index;
++  else
++  {
++    g_printerr ("ARM64_YONLENDIRME_UYARI: hedefin üst adres bitleri sığmıyor; "
++        "özgün LDR kullanılıyor, bu hedef gizlenmedi\n");
++    return FALSE;
++  }
++
++  gum_arm64_writer_put_instruction (aw, first);
++  gum_arm64_writer_put_instruction (aw,
++      0xf2a00000u | (((target >> 16) & 0xffff) << 5) | reg_index);
++  gum_arm64_writer_put_instruction (aw,
++      0xf2c00000u | (((target >> 32) & 0xffff) << 5) | reg_index);
++  gum_arm64_writer_put_br_reg (aw, scratch_reg);
++
++  return TRUE;
++}
++
+ void
+ _gum_interceptor_backend_activate_trampoline (GumInterceptorBackend * self,
+                                               GumFunctionContext * ctx,
+@@ -1123,8 +1164,12 @@
+         gum_arm64_writer_put_br_reg_no_auth (aw, data->scratch_reg);
+         break;
+       case GUM_INTERCEPTOR_FULL_REDIRECT_SIZE:
+-        gum_arm64_writer_put_ldr_reg_address (aw, data->scratch_reg, on_enter);
+-        gum_arm64_writer_put_br_reg (aw, data->scratch_reg);
++        if (!gum_arm64_writer_put_compact_redirect (aw, data->scratch_reg,
++            on_enter))
++        {
++          gum_arm64_writer_put_ldr_reg_address (aw, data->scratch_reg, on_enter);
++          gum_arm64_writer_put_br_reg (aw, data->scratch_reg);
++        }
+         break;
+       default:
+         g_assert_not_reached ();

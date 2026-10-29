@@ -87,6 +87,16 @@ Useful options:
 --ndk-path       Use an existing Android NDK r29 directory
 ```
 
+Android ARM64 builds of Frida 17.16.4 also apply the interceptor redirect
+patch in `patches/arm64-interceptor-redirect.patch`. It replaces the standard
+16-byte literal-load redirect with MOV/MOVK instructions for X16/X17 targets
+whose upper 16 bits are all zero or all one. This avoids two byte patterns
+observed in XIGNCODE's ARM64 hook checks. Other targets retain the original
+redirect and print a warning; on Android the target process may discard stderr.
+The patch does not prevent other integrity or behavior checks, and its presence
+is not proof that instrumentation is undetectable. Source drift causes the build
+to fail instead of silently skipping the patch.
+
 ## Outputs and provenance
 
 For the example above, `output/` contains:

@@ -770,6 +770,22 @@ def apply_targeted_patches(frida_dir: Path, custom_name: str, frida_major: int):
     log("Targeted patches complete", "OK")
 
 
+def apply_arm64_redirect_patch(frida_dir: Path) -> None:
+    """Apply the pinned ARM64 interceptor redirect patch, or fail on source drift."""
+    gum = frida_dir / "subprojects/frida-gum"
+    patch = Path(__file__).resolve().parent / "patches/arm64-interceptor-redirect.patch"
+    command = ["git", "apply", "-p3", str(patch)]
+    check = command[:2] + ["--check"] + command[2:]
+    if run(check, cwd=gum, check=False, capture_output=True).returncode:
+        reverse = command[:2] + ["--reverse", "--check"] + command[2:]
+        if run(reverse, cwd=gum, check=False, capture_output=True).returncode == 0:
+            log("ARM64 interceptor redirect patch already applied", "OK")
+            return
+        raise BuildError("ARM64 interceptor redirect patch does not match Frida 17.16.4 source")
+    run(command, cwd=gum)
+    log("ARM64 interceptor redirect patch applied", "OK")
+
+
 def apply_strict_wx_patch(frida_dir: Path, custom_name: str) -> None:
     """Disable persistent anonymous RWX mappings owned by Frida on Android."""
     helper_backend = Path(f"subprojects/frida-core/src/linux/{custom_name}-helper-backend.vala")
@@ -1878,6 +1894,8 @@ Transformations and verification boundaries:
     custom_name = validate_custom_name(args.name)
     archs = parse_architectures(args.arch)
     port = validate_port(args.port)
+    if "android-arm64" in archs and version != "17.16.4":
+        raise BuildError("ARM64 interceptor redirect patch requires Frida 17.16.4")
     validate_build_prerequisites(skip_build=args.skip_build)
 
     # Directories
@@ -1924,6 +1942,8 @@ Transformations and verification boundaries:
     # Step 3: Source patches
     apply_source_patches(frida_dir, custom_name)
     apply_targeted_patches(frida_dir, custom_name, frida_major)
+    if "android-arm64" in archs:
+        apply_arm64_redirect_patch(frida_dir)
     if args.strict_wx:
         apply_strict_wx_patch(frida_dir, custom_name)
 
