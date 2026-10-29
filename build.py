@@ -420,7 +420,7 @@ def ensure_ndk(work_dir: Path) -> Path:
         verify_file_checksum(ndk_zip, NDK_ARCHIVE_SHA1, "sha1")
 
     log("Extracting NDK...", "STEP")
-    run(["unzip", "-q", ndk_zip], cwd=work_dir)
+    run(["unzip", "-q", "-o", ndk_zip], cwd=work_dir)
 
     if ndk_dir.exists():
         validate_ndk(ndk_dir)
